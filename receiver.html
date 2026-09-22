@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>光傳輸接收器</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card-bg: #ffffff;
+    --text: #1d1d1f;
+    --text-dim: #6e6e73;
+    --accent: #0071e3;
+    --accent-2: #34c759;
+    --danger: #ff3b30;
+    --border: #d2d2d7;
+    --track: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000;
+      --card-bg: #1c1c1e;
+      --text: #f5f5f7;
+      --text-dim: #98989d;
+      --accent: #0a84ff;
+      --accent-2: #30d158;
+      --danger: #ff453a;
+      --border: #38383a;
+      --track: #2c2c2e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000;
+    --card-bg: #1c1c1e;
+    --text: #f5f5f7;
+    --text-dim: #98989d;
+    --accent: #0a84ff;
+    --accent-2: #30d158;
+    --danger: #ff453a;
+    --border: #38383a;
+    --track: #2c2c2e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 4px 0 0 0;
+    text-align: center;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    text-align: center;
+    margin: 0 0 4px 0;
+    max-width: 480px;
+  }
+  .video-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .scan-frame {
+    position: absolute;
+    inset: 8%;
+    border: 2px solid rgba(255,255,255,0.6);
+    border-radius: 12px;
+    pointer-events: none;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .status-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+  .status-line .label { color: var(--text-dim); }
+  .filename {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+    word-break: break-all;
+  }
+  .progress-track {
+    width: 100%;
+    height: 10px;
+    background: var(--track);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+  .progress-fill.done { background: var(--accent-2); }
+  .progress-text {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-align: right;
+  }
+  .btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+    text-decoration: none;
+  }
+  .btn-primary { background: var(--accent-2); color: white; }
+  .btn-secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .hint {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 480px;
+  }
+  .error-box {
+    color: var(--danger);
+    font-size: 0.85rem;
+    text-align: center;
+    max-width: 480px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>📷 光傳輸接收器</h1>
+  <p class="subtitle">將鏡頭對準電腦螢幕上閃爍的 QR Code，資料會自動收集組回原始檔案。</p>
+
+  <div class="video-wrap">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="scan-frame"></div>
+  </div>
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <div class="card" id="statusCard">
+    <div class="status-line">
+      <span class="label">狀態</span>
+      <span id="statusText">等待鏡頭啟動…</span>
+    </div>
+    <div class="filename" id="filenameText" style="display:none;"></div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText">0 / 0 片</div>
+
+    <button class="btn btn-primary" id="downloadBtn" style="display:none;">下載檔案</button>
+    <button class="btn btn-secondary" id="resetBtn">重新開始接收</button>
+  </div>
+
+  <p class="hint" id="hintText">
+    小技巧：讓電腦畫面盡量填滿鏡頭視野、避免反光，若一直卡在某個進度，代表某些畫面沒掃到，等它循環重播即可自動補上。
+  </p>
+  <div class="error-box" id="errorBox"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script>
+(function () {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  const statusText = document.getElementById('statusText');
+  const filenameText = document.getElementById('filenameText');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const errorBox = document.getElementById('errorBox');
+
+  let state = null; // { totalChunks, totalSize, filename, chunks: Map<index, Uint8Array> }
+  let rafId = null;
+  let stream = null;
+
+  // ---- CRC32（與 Python 端 zlib.crc32 相容） ----
+  const crcTable = (function () {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = crcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function resetState() {
+    state = null;
+    filenameText.style.display = 'none';
+    downloadBtn.style.display = 'none';
+    progressFill.style.width = '0%';
+    progressFill.classList.remove('done');
+    progressText.textContent = '0 / 0 片';
+    statusText.textContent = '掃描中，尋找 META 畫面…';
+    errorBox.textContent = '';
+  }
+
+  function handleDecodedText(text) {
+    try {
+      if (text.startsWith('META|')) {
+        const parts = text.split('|');
+        const totalChunks = parseInt(parts[1], 10);
+        const totalSize = parseInt(parts[2], 10);
+        const filenameBytes = base64ToBytes(parts[3]);
+        const filename = new TextDecoder('utf-8').decode(filenameBytes);
+
+        if (!state || state.totalChunks !== totalChunks || state.filename !== filename) {
+          state = {
+            totalChunks: totalChunks,
+            totalSize: totalSize,
+            filename: filename,
+            chunks: new Map(),
+          };
+          filenameText.textContent = filename + '（' + totalSize + ' bytes）';
+          filenameText.style.display = 'block';
+        }
+        updateProgress();
+        return;
+      }
+
+      if (text.startsWith('F')) {
+        // 格式: F<idx>/<total>|<crcHex>|<base64payload>
+        const firstBar = text.indexOf('|');
+        if (firstBar < 0) return;
+        const head = text.substring(1, firstBar); // "<idx>/<total>"
+        const rest = text.substring(firstBar + 1);
+        const secondBar = rest.indexOf('|');
+        if (secondBar < 0) return;
+        const crcHex = rest.substring(0, secondBar);
+        const payloadB64 = rest.substring(secondBar + 1);
+
+        const slashPos = head.indexOf('/');
+        if (slashPos < 0) return;
+        const idx = parseInt(head.substring(0, slashPos), 10);
+        const total = parseInt(head.substring(slashPos + 1), 10);
+
+        if (!state) {
+          // 還沒收到 META，先建立暫時 state
+          state = { totalChunks: total, totalSize: null, filename: '未知檔名', chunks: new Map() };
+        }
+
+        if (state.chunks.has(idx)) {
+          updateProgress();
+          return; // 已經有這片了
+        }
+
+        const payload = base64ToBytes(payloadB64);
+        const crc = crc32(payload);
+        const expectedCrc = parseInt(crcHex, 16);
+
+        if (crc !== expectedCrc) {
+          // 校驗失敗，捨棄，等待下一輪重播
+          return;
+        }
+
+        state.chunks.set(idx, payload);
+        updateProgress();
+        maybeAssemble();
+      }
+    } catch (e) {
+      // 解析失敗，忽略這一幀（可能拍到雜訊或不完整畫面）
+    }
+  }
+
+  function updateProgress() {
+    if (!state) return;
+    const total = state.totalChunks;
+    const received = state.chunks.size;
+    const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+    progressFill.style.width = pct + '%';
+    progressText.textContent = received + ' / ' + total + ' 片（' + pct + '%）';
+    statusText.textContent = received < total ? '接收中…' : '整理檔案中…';
+  }
+
+  function maybeAssemble() {
+    if (!state || state.chunks.size < state.totalChunks) return;
+
+    const parts = [];
+    for (let i = 0; i < state.totalChunks; i++) {
+      const chunk = state.chunks.get(i);
+      if (!chunk) return; // 理論上不會發生
+      parts.push(chunk);
+    }
+    const blob = new Blob(parts, { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+
+    downloadBtn.style.display = 'block';
+    downloadBtn.onclick = function () {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = state.filename || 'received_file';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    progressFill.classList.add('done');
+    statusText.textContent = '✅ 接收完成！';
+  }
+
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 1280 } },
+        audio: false,
+      });
+    } catch (e) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch (e2) {
+        errorBox.textContent = '無法啟動相機：' + e2.message + '（請確認已允許相機權限，且使用 https 開啟此頁）';
+        statusText.textContent = '相機啟動失敗';
+        return;
+      }
+    }
+    video.srcObject = stream;
+    await video.play();
+    statusText.textContent = '掃描中，尋找 META 畫面…';
+    tick();
+  }
+
+  function tick() {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert',
+      });
+      if (code && code.data) {
+        handleDecodedText(code.data);
+      }
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  resetBtn.addEventListener('click', function () {
+    resetState();
+  });
+
+  window.addEventListener('beforeunload', function () {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (rafId) cancelAnimationFrame(rafId);
+  });
+
+  resetState();
+  startCamera();
+})();
+</script>
+</body>
+</html>
